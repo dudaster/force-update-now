@@ -25,25 +25,55 @@ class FUN_Admin {
 	}
 
 	public static function enqueue_assets( $hook ) {
-		if ( 'tools_page_force-update-now' !== $hook ) {
+		if ( 'tools_page_force-update-now' === $hook ) {
+			wp_enqueue_script(
+				'fun-admin',
+				plugins_url( 'assets/admin.js', FUN_PLUGIN_FILE ),
+				array( 'jquery' ),
+				'0.1.0',
+				true
+			);
+
+			wp_localize_script( 'fun-admin', 'FUN', self::localized_data() );
 			return;
 		}
 
-		wp_enqueue_script(
-			'fun-admin',
-			plugins_url( 'assets/admin.js', FUN_PLUGIN_FILE ),
-			array( 'jquery' ),
-			'0.1.0',
-			true
-		);
+		// The "View details" thickbox for a plugin loads this same admin page
+		// (plugin-install.php?tab=plugin-information&plugin=<slug>) in an
+		// iframe — this is where we inject the force-update button.
+		if ( 'plugin-install.php' === $hook ) {
+			wp_enqueue_script(
+				'fun-plugin-info',
+				plugins_url( 'assets/plugin-info.js', FUN_PLUGIN_FILE ),
+				array( 'jquery' ),
+				'0.1.0',
+				true
+			);
 
-		wp_localize_script(
-			'fun-admin',
-			'FUN',
-			array(
-				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-				'nonce'   => wp_create_nonce( self::NONCE_ACTION ),
-			)
+			wp_localize_script( 'fun-plugin-info', 'FUN', self::localized_data() );
+			return;
+		}
+
+		// Installed Plugins screen — this is where people actually look, so
+		// the cooldown notice + force-update button live here too, not just
+		// buried in Tools.
+		if ( 'plugins.php' === $hook ) {
+			wp_enqueue_script(
+				'fun-plugins-list',
+				plugins_url( 'assets/plugins-list.js', FUN_PLUGIN_FILE ),
+				array( 'jquery' ),
+				'0.1.0',
+				true
+			);
+
+			wp_localize_script( 'fun-plugins-list', 'FUN', self::localized_data() );
+		}
+	}
+
+	private static function localized_data() {
+		return array(
+			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+			'nonce'   => wp_create_nonce( self::NONCE_ACTION ),
 		);
 	}
 
@@ -129,6 +159,27 @@ class FUN_Admin {
 		return basename( $plugin_file, '.php' );
 	}
 
+	/**
+	 * The "View details" modal only gives us a slug (from its URL query
+	 * string), not the installed plugin_file path — resolve it by matching
+	 * guess_plugin_slug() against every installed plugin.
+	 *
+	 * @return string|null
+	 */
+	private static function resolve_plugin_file( $slug ) {
+		if ( ! function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		foreach ( array_keys( get_plugins() ) as $plugin_file ) {
+			if ( self::guess_plugin_slug( $plugin_file ) === $slug ) {
+				return $plugin_file;
+			}
+		}
+
+		return null;
+	}
+
 	public static function ajax_check() {
 		check_ajax_referer( self::NONCE_ACTION, 'nonce' );
 		if ( ! current_user_can( 'update_plugins' ) ) {
@@ -139,6 +190,13 @@ class FUN_Admin {
 		$file = sanitize_text_field( wp_unslash( $_POST['file'] ?? '' ) );
 		$slug = sanitize_key( $_POST['slug'] ?? '' );
 
+		if ( 'theme' !== $type && '' === $file ) {
+			$file = self::resolve_plugin_file( $slug );
+			if ( null === $file ) {
+				wp_send_json_error( 'not_installed' );
+			}
+		}
+
 		$diff = 'theme' === $type
 			? FUN_Checker::diff_theme( $slug )
 			: FUN_Checker::diff_plugin( $file, $slug );
@@ -146,6 +204,8 @@ class FUN_Admin {
 		if ( is_wp_error( $diff ) ) {
 			wp_send_json_error( $diff->get_error_message() );
 		}
+
+		$diff['file'] = $file;
 
 		wp_send_json_success( $diff );
 	}
@@ -159,6 +219,13 @@ class FUN_Admin {
 		$type = sanitize_key( $_POST['type'] ?? '' );
 		$file = sanitize_text_field( wp_unslash( $_POST['file'] ?? '' ) );
 		$slug = sanitize_key( $_POST['slug'] ?? '' );
+
+		if ( 'theme' !== $type && '' === $file ) {
+			$file = self::resolve_plugin_file( $slug );
+			if ( null === $file ) {
+				wp_send_json_error( 'not_installed' );
+			}
+		}
 
 		$diff = 'theme' === $type
 			? FUN_Checker::diff_theme( $slug )

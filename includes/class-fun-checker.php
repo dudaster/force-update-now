@@ -75,7 +75,8 @@ class FUN_Checker {
 			// ->last_updated is stamped by WordPress.org on every SVN commit;
 			// useful as a signal for "how fresh" the version you're about to
 			// force is.
-			'last_updated'  => isset( $remote->last_updated ) ? $remote->last_updated : null,
+			'last_updated'        => isset( $remote->last_updated ) ? $remote->last_updated : null,
+			'hours_since_release' => self::hours_since( $remote->last_updated ?? null ),
 		);
 	}
 
@@ -88,11 +89,30 @@ class FUN_Checker {
 		}
 
 		return array(
-			'installed'     => $installed->get( 'Version' ),
-			'remote'        => $remote->version,
-			'has_update'    => version_compare( $remote->version, $installed->get( 'Version' ), '>' ),
-			'download_link' => $remote->download_link,
-			'last_updated'  => isset( $remote->last_updated ) ? $remote->last_updated : null,
+			'installed'           => $installed->get( 'Version' ),
+			'remote'              => $remote->version,
+			'has_update'          => version_compare( $remote->version, $installed->get( 'Version' ), '>' ),
+			'download_link'       => $remote->download_link,
+			'last_updated'        => isset( $remote->last_updated ) ? $remote->last_updated : null,
+			'hours_since_release' => self::hours_since( $remote->last_updated ?? null ),
 		);
+	}
+
+	/**
+	 * @return float|null Hours elapsed since $last_updated (WordPress.org's
+	 *                     "->last_updated" format, e.g. "2026-08-19 3:00pm GMT"),
+	 *                     or null if it couldn't be parsed.
+	 */
+	private static function hours_since( $last_updated ) {
+		if ( empty( $last_updated ) ) {
+			return null;
+		}
+
+		$timestamp = strtotime( $last_updated );
+		if ( false === $timestamp ) {
+			return null;
+		}
+
+		return max( 0, ( time() - $timestamp ) / HOUR_IN_SECONDS );
 	}
 }
