@@ -18,5 +18,7 @@ require_once FUN_PLUGIN_DIR . 'includes/class-fun-checker.php';
 require_once FUN_PLUGIN_DIR . 'includes/class-fun-installer.php';
 require_once FUN_PLUGIN_DIR . 'includes/class-fun-safety.php';
 require_once FUN_PLUGIN_DIR . 'includes/class-fun-admin.php';
+require_once FUN_PLUGIN_DIR . 'includes/class-fun-self-updater.php';
 
 FUN_Admin::init();
+FUN_Self_Updater::init();
